@@ -1,4 +1,5 @@
 import pickle
+import os
 
 import telegram
 import asyncio
@@ -24,6 +25,11 @@ userdata = [
 
 
 async def send_telegram_alert(msg, telegram_chat_id):
+    print('sending telegram message')
+    if debug:
+        print('debug: skipping sending telegram message')
+        return
+
     bot = telegram.Bot(telegram_api_token)
     async with bot:
         await bot.send_message(text=msg, chat_id=telegram_chat_id)
@@ -40,49 +46,63 @@ async def main():
         username = user['username']
         password = user['password']
         telegram_chat_id = user['telegram_chat_id']
-        filename = f'marks_{username}.pickle'
+        filename = f'{os.path.dirname(__file__)}/marks_{username}.pickle'
 
-        print(f'beginning for user: {username}')
+        print(f'beginning for user: {username}, file_path: {filename}, telegram_chat_id: {telegram_chat_id}')
 
         options = Options()
-        options.add_argument('-headless')
-        driver = webdriver.Firefox(options=options)
-        driver.get(icms_url)
+        # options.add_argument('-headless')
 
-        # login
-        driver.find_element(By.CLASS_NAME, 'loginuser').send_keys(username)
-        driver.find_element(By.CLASS_NAME, 'loginpass').send_keys(password)
+        driver = None
 
-        driver.find_element(By.ID, 'loginForm:login').click()
+        try:
+            driver = webdriver.Firefox(options=options)
+            driver.get(icms_url)
 
-        # nav to notenspiegel
-        driver.find_element(By.LINK_TEXT, 'Prüfungen').click()
-        driver.find_element(By.LINK_TEXT, 'Notenspiegel').click()
+            # login
+            driver.find_element(By.CLASS_NAME, 'loginuser').send_keys(username)
+            driver.find_element(By.CLASS_NAME, 'loginpass').send_keys(password)
 
-        driver.find_element(By.LINK_TEXT, 'Abschluss 84 Bachelor').click()
-        driver.find_element(By.XPATH, '/html/body/div/div[6]/div[2]/form/ul/li/ul/li/a[1]').click()
+            driver.find_element(By.ID, 'loginForm:login').click()
 
-        # get all tr elements
-        elements = driver.find_elements(By.XPATH, '/html/body/div/div[6]/div[2]/form/table[2]/tbody/tr')
-        # discard first (table header) and last element (Abschluss)
-        elements = elements[1:-1]
+            input('waiting')
+            # nav to notenspiegel
+            # Prüfungen
+            driver.find_element(By.XPATH, '/html/body/div/div[6]/div[1]/ul/li[3]/a').click()
+            # Notenspiegel
+            driver.find_element(By.XPATH, '/html/body/div/div[6]/div[2]/div/form/div/ul/li[3]/a').click()
 
-        marks = {}
+            # Abschluss 84 Bachelor Leistungen für Abschluss 84 Bachelor anzeigen
+            driver.find_element(By.XPATH, '/html/body/div/div[6]/div[2]/form/ul/li/a[1]').click()
+            driver.find_element(By.XPATH, '/html/body/div/div[6]/div[2]/form/ul/li/ul/li/a[1]').click()
 
-        for element in elements:
-            # get all td elements (a row )
-            tds = element.find_elements(By.XPATH, 'td')
-            # filter meta modules and part modules (GE == Modul)
-            if int(tds[0].text) < 99999 or tds[2].text != 'GE':
-                continue
+            # get all tr elements
+            elements = driver.find_elements(By.XPATH, '/html/body/div/div[6]/div[2]/form/table[2]/tbody/tr')
 
-            name = tds[1].text
-            mark = tds[3].text
-            status = tds[4].text
+            # discard first (table header) and last element (Abschluss)
+            elements = elements[1:-1]
 
-            marks[name] = mark, status
+            marks = {}
 
-        driver.close()
+            for element in elements:
+                # get all td elements (a row )
+                tds = element.find_elements(By.XPATH, 'td')
+                # filter meta modules and part modules (GE == Modul)
+                if int(tds[0].text) < 99999 or tds[2].text != 'GE':
+                    continue
+
+                name = tds[1].text
+                mark = tds[3].text
+                status = tds[4].text
+
+                marks[name] = mark, status
+        except Exception as e:
+            print('failed during webpage navigation, exiting')
+            print(e)
+            return
+        finally:
+            driver.close()
+
         print(marks)
 
         # compare to old marks
