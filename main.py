@@ -1,11 +1,18 @@
 import pickle
 import os
+import time
+import traceback
 
+import selenium.webdriver.remote.webelement
 import telegram
 import asyncio
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.firefox.options import Options
+from selenium.webdriver.support.wait import WebDriverWait
+from selenium.webdriver.support import expected_conditions
+
+debug = True
 
 icms_url = 'https://icms.hs-hannover.de/qisserver/rds?state=user&type=0'
 telegram_api_token = 'TELEGRAM_API_TOKEN'
@@ -41,6 +48,20 @@ async def telegram_debug():
         print((await bot.get_updates())[0])
 
 
+def try_find_partial_name(driver, names) -> selenium.webdriver.remote.webelement.WebElement:
+    for name in names:
+        try:
+            element = driver.find_element(By.PARTIAL_LINK_TEXT, name)
+            return element
+        except Exception as e:
+            pass
+    raise Exception('could not locate element')
+
+
+def element_exists(driver: webdriver, method: selenium.webdriver.common.by, arg) -> bool:
+    return len(driver.find_elements(method, arg)) > 0
+
+
 async def main():
     for user in userdata:
         username = user['username']
@@ -57,8 +78,42 @@ async def main():
 
         try:
             driver = webdriver.Firefox(options=options)
-            driver.get(icms_url)
+            driver.get('https://icms.hs-hannover.de/qisserver/rds?state=user&type=0&category=auth.logout')
 
+            # login
+            element_username = driver.find_element(By.XPATH, '//*[@id="asdf"]')
+            element_password = driver.find_element(By.XPATH, '//*[@id="fdsa"]')
+            element_login = driver.find_element(By.XPATH, '//*[@id="loginForm:login"]')
+
+            element_username.send_keys(username)
+            element_password.send_keys(password)
+            element_login.click()
+            time.sleep(10)
+
+            # navigate
+            element_sitemap = driver.find_element(By.XPATH, '/html/body/div/div[2]/div[2]/ol/li[2]/a')
+            element_sitemap.click()
+            #WebDriverWait(driver, timeout=60).until_not(element_exists(driver, By.XPATH, '//*[@id="loginForm:login"]'))
+            WebDriverWait(driver, timeout=60).until(expected_conditions.presence_of_element_located((By.PARTIAL_LINK_TEXT, 'Notenspiegel')))
+
+            time.sleep(3)
+
+            # element_grades = driver.find_element(By.XPATH, '/html/body/div/div[6]/div[2]/div/ul[1]/li/ul/li[3]/ul/li[3]/a')
+            element_grades = try_find_partial_name(driver, ['Notenspiegel', 'Notenspiegel'.lower(), 'Exams Extract',
+                                                            'Exams Extract'.lower()])
+            element_grades.click()
+
+            time.sleep(3)
+
+            element_show_icon = driver.find_element(By.XPATH, '/html/body/div/div[6]/div[2]/form/ul/li/a[2]/img')
+            element_show_icon.click()
+
+            time.sleep(3)
+
+            '''
+            driver = webdriver.Firefox(options=options)
+            driver.get(icms_url)
+            
             # login
             driver.find_element(By.CLASS_NAME, 'loginuser').send_keys(username)
             driver.find_element(By.CLASS_NAME, 'loginpass').send_keys(password)
@@ -70,14 +125,19 @@ async def main():
             # Prüfungen
             driver.find_element(By.XPATH, '/html/body/div/div[6]/div[1]/ul/li[3]/a').click()
             # Notenspiegel
-            driver.find_element(By.XPATH, '/html/body/div/div[6]/div[2]/div/form/div/ul/li[3]/a').click()
+            try_find_partial_name(driver, ['Notenspiegel', 'Notenspiegel'.lower(), 'Exams Extract', 'Exams Extract'.lower()]).click()
+            # driver.find_element(By.PARTIAL_LINK_TEXT, 'spiegel').click()
+            # driver.find_element(By.XPATH, '/html/body/div/div[6]/div[2]/div/form/div/ul/li[3]/a').click()
 
             # Abschluss 84 Bachelor Leistungen für Abschluss 84 Bachelor anzeigen
             driver.find_element(By.XPATH, '/html/body/div/div[6]/div[2]/form/ul/li/a[1]').click()
             driver.find_element(By.XPATH, '/html/body/div/div[6]/div[2]/form/ul/li/ul/li/a[1]').click()
 
+            '''
             # get all tr elements
             elements = driver.find_elements(By.XPATH, '/html/body/div/div[6]/div[2]/form/table[2]/tbody/tr')
+            if len(elements) == 0:
+                print('no elements in list??')
 
             # discard first (table header) and last element (Abschluss)
             elements = elements[1:-1]
@@ -99,6 +159,8 @@ async def main():
         except Exception as e:
             print('failed during webpage navigation, exiting')
             print(e)
+            print(traceback.format_exc())
+            print(driver.page_source)
             return
         finally:
             driver.close()
