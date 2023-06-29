@@ -4,8 +4,11 @@ import time
 import traceback
 
 import selenium.webdriver.remote.webelement
-import telegram
 import asyncio
+
+# https://github.com/python-telegram-bot/python-telegram-bot
+import telegram
+
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.firefox.options import Options
@@ -16,6 +19,8 @@ debug = True
 
 icms_url = 'https://icms.hs-hannover.de/qisserver/rds?state=user&type=0'
 telegram_api_token = 'TELEGRAM_API_TOKEN'
+
+bot: telegram.Bot
 
 userdata = [
     {
@@ -30,20 +35,47 @@ userdata = [
     }
 ]
 
+status_codes = {
+    'AN': 'angemeldet',
+    'BE': 'bestanden',
+    'NB': 'nicht bestanden',
+    'EN': 'endgültig nicht bestanden',
+    'AB': 'abgemeldet',
+    'KR': 'Krankmeldung',
+    'GR': 'genehmigter Rücktritt',
+    'NGR': 'nicht genehmigter Rücktritt',
+    'NE': 'nicht erschienen',
+    'RT': 'abgemeldet über QISPOS',
+    'ME': 'mündl. Ergänzungsprüfung',
+    'VZ': 'Verzicht auf Wiederholung',
+    'TA': 'Täuschungsversuch',
+    'PV': 'Konto/Modul nicht vollständig',
+    'FAE': 'fristgerechte Arbeitsabgabe erfolgt',
+}
+
+art_codes = {
+    'GE': 'Modul',
+    'PL': 'Teilmodul',
+    'MB': 'Modul Bachelorarbeit',
+    'MM': 'Modul Masterarbeit',
+    'AA': 'Abschlussarbeit (Bachelor od. Master)',
+}
+
 
 async def send_telegram_alert(msg, telegram_chat_id):
+    global bot
+
     print('sending telegram message')
     if debug:
         print('debug: skipping sending telegram message')
         return
 
-    bot = telegram.Bot(telegram_api_token)
     async with bot:
         await bot.send_message(text=msg, chat_id=telegram_chat_id)
 
 
 async def telegram_debug():
-    bot = telegram.Bot(telegram_api_token)
+    global bot
     async with bot:
         print((await bot.get_updates())[0])
 
@@ -63,6 +95,9 @@ def element_exists(driver: webdriver, method: selenium.webdriver.common.by, arg)
 
 
 async def main():
+    global bot
+    bot = telegram.Bot(telegram_api_token)
+
     for user in userdata:
         username = user['username']
         password = user['password']
@@ -93,8 +128,9 @@ async def main():
             # navigate
             element_sitemap = driver.find_element(By.XPATH, '/html/body/div/div[2]/div[2]/ol/li[2]/a')
             element_sitemap.click()
-            #WebDriverWait(driver, timeout=60).until_not(element_exists(driver, By.XPATH, '//*[@id="loginForm:login"]'))
-            WebDriverWait(driver, timeout=60).until(expected_conditions.presence_of_element_located((By.PARTIAL_LINK_TEXT, 'Notenspiegel')))
+            # WebDriverWait(driver, timeout=60).until_not(element_exists(driver, By.XPATH, '//*[@id="loginForm:login"]'))
+            WebDriverWait(driver, timeout=60).until(
+                expected_conditions.presence_of_element_located((By.PARTIAL_LINK_TEXT, 'Notenspiegel')))
 
             time.sleep(3)
 
@@ -110,30 +146,6 @@ async def main():
 
             time.sleep(3)
 
-            '''
-            driver = webdriver.Firefox(options=options)
-            driver.get(icms_url)
-            
-            # login
-            driver.find_element(By.CLASS_NAME, 'loginuser').send_keys(username)
-            driver.find_element(By.CLASS_NAME, 'loginpass').send_keys(password)
-
-            driver.find_element(By.ID, 'loginForm:login').click()
-
-            input('waiting')
-            # nav to notenspiegel
-            # Prüfungen
-            driver.find_element(By.XPATH, '/html/body/div/div[6]/div[1]/ul/li[3]/a').click()
-            # Notenspiegel
-            try_find_partial_name(driver, ['Notenspiegel', 'Notenspiegel'.lower(), 'Exams Extract', 'Exams Extract'.lower()]).click()
-            # driver.find_element(By.PARTIAL_LINK_TEXT, 'spiegel').click()
-            # driver.find_element(By.XPATH, '/html/body/div/div[6]/div[2]/div/form/div/ul/li[3]/a').click()
-
-            # Abschluss 84 Bachelor Leistungen für Abschluss 84 Bachelor anzeigen
-            driver.find_element(By.XPATH, '/html/body/div/div[6]/div[2]/form/ul/li/a[1]').click()
-            driver.find_element(By.XPATH, '/html/body/div/div[6]/div[2]/form/ul/li/ul/li/a[1]').click()
-
-            '''
             # get all tr elements
             elements = driver.find_elements(By.XPATH, '/html/body/div/div[6]/div[2]/form/table[2]/tbody/tr')
             if len(elements) == 0:
@@ -147,15 +159,20 @@ async def main():
             for element in elements:
                 # get all td elements (a row )
                 tds = element.find_elements(By.XPATH, 'td')
-                # filter meta modules and part modules (GE == Modul)
-                if int(tds[0].text) < 99999 or tds[2].text != 'GE':
+                if len(tds) <= 4:
+                    continue
+
+                if int(tds[0].text) < 9999:
                     continue
 
                 name = tds[1].text
+                art = tds[2].text
+                art = art_codes[art] if art in art_codes else art
                 mark = tds[3].text
                 status = tds[4].text
+                status = status_codes[status] if status in status_codes else status
 
-                marks[name] = mark, status
+                marks[name] = mark, art, status
         except Exception as e:
             print('failed during webpage navigation, exiting')
             print(e)
@@ -173,10 +190,10 @@ async def main():
         try:
             with open(filename, 'rb') as infile:
                 old_marks = pickle.load(infile)
-
                 for key in marks.keys():
                     if key not in old_marks or marks[key] != old_marks[key]:
                         updates[key] = marks[key]
+
         # if no file with old data could be opened, consider all data new
         except OSError as e:
             print('failed to open file with previous data, considering all data updated')
@@ -187,12 +204,12 @@ async def main():
         if len(updates) > 0:
             print(f'the following updates occurred for user {username}:')
             for key in updates:
-                print(key, updates[key][0], updates[key][1])
+                print('\t', key, updates[key][0], updates[key][1])
             with open(filename, 'wb') as outfile:
                 pickle.dump(marks, outfile)
-            msg_str = 'ICMS-Watcher Update\n'
+            msg_str = 'ICMS-Watcher Update:\n'
             for key in updates.keys():
-                msg_str += f'{key}: {updates[key][0]} - {updates[key][1]}\n'
+                msg_str += f'{key}: {updates[key][0]} - {updates[key][1]} - {updates[key][2]}\n'
             await send_telegram_alert(msg_str, telegram_chat_id)
         else:
             print(f'no update occurred for user {username}')
