@@ -2,6 +2,7 @@ import pickle
 import os
 import time
 import traceback
+from datetime import datetime
 
 import selenium.webdriver.remote.webelement
 import asyncio
@@ -11,28 +12,28 @@ import telegram
 
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.firefox.options import Options
+from selenium.webdriver.firefox.options import Options as FirefoxOptions
+from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions
 
+from webdriver_manager.chrome import ChromeDriverManager
+
+
 debug = True
 
-icms_url = 'https://icms.hs-hannover.de/qisserver/rds?state=user&type=0'
-telegram_api_token = 'TELEGRAM_API_TOKEN'
+icms_url = 'https://campusmanagement.hs-hannover.de/qisserver/pages/cs/sys/portal/hisinoneStartPage.faces'
+telegram_api_token = '<TELEGRAM_API_TOKEN>'
 
 bot: telegram.Bot
 
 userdata = [
     {
-        'username': 'USERNAME',
-        'password': '',
-        'telegram_chat_id': TELEGRAM_CHAT_ID
+        'username': '<ICMS_USERNAME>',
+        'password': '<ICMS_PASSWORD>',
+        'telegram_chat_id': 0000000000,
+        'telegram_subscribers': [0000000000],
     },
-    {
-        'username': '4td-y05-u1',
-        'password': '',
-        'telegram_chat_id': 1334516177
-    }
 ]
 
 status_codes = {
@@ -65,7 +66,8 @@ art_codes = {
 async def send_telegram_alert(msg, telegram_chat_id):
     global bot
 
-    print('sending telegram message')
+    print(f'sending telegram message to {telegram_chat_id}')
+    print(f'msg: {msg}\n')
     if debug:
         print('debug: skipping sending telegram message')
         return
@@ -87,7 +89,7 @@ def try_find_partial_name(driver, names) -> selenium.webdriver.remote.webelement
             return element
         except Exception as e:
             pass
-    raise Exception('could not locate element')
+    raise Exception(f'could not locate element with any of the names {names}')
 
 
 def element_exists(driver: webdriver, method: selenium.webdriver.common.by, arg) -> bool:
@@ -106,54 +108,64 @@ async def main():
 
         print(f'beginning for user: {username}, file_path: {filename}, telegram_chat_id: {telegram_chat_id}')
 
-        options = Options()
+        options = ChromeOptions()
+        options.add_argument('--headless=new')
         # options.add_argument('-headless')
+        # add firefox options disable js
+        # options.set_preference("javascript.enabled", False)
 
         driver = None
 
         try:
-            driver = webdriver.Firefox(options=options)
-            driver.get('https://icms.hs-hannover.de/qisserver/rds?state=user&type=0&category=auth.logout')
+            driver = webdriver.Chrome(ChromeDriverManager().install(), options=options)
+            driver.get(icms_url)
 
-            # login
+            print(f'waiting for login form')
+            WebDriverWait(driver, timeout=120).until(
+                expected_conditions.presence_of_element_located((By.XPATH, '//*[@id="loginForm:login"]')))
             element_username = driver.find_element(By.XPATH, '//*[@id="asdf"]')
             element_password = driver.find_element(By.XPATH, '//*[@id="fdsa"]')
             element_login = driver.find_element(By.XPATH, '//*[@id="loginForm:login"]')
 
             element_username.send_keys(username)
+            element_password.send_keys('X')
+            time.sleep(1)
+            element_password.clear()
             element_password.send_keys(password)
             element_login.click()
-            time.sleep(10)
-
-            # navigate
-            element_sitemap = driver.find_element(By.XPATH, '/html/body/div/div[2]/div[2]/ol/li[2]/a')
-            element_sitemap.click()
-            # WebDriverWait(driver, timeout=60).until_not(element_exists(driver, By.XPATH, '//*[@id="loginForm:login"]'))
-            WebDriverWait(driver, timeout=60).until(
-                expected_conditions.presence_of_element_located((By.PARTIAL_LINK_TEXT, 'Notenspiegel')))
 
             time.sleep(3)
 
-            # element_grades = driver.find_element(By.XPATH, '/html/body/div/div[6]/div[2]/div/ul[1]/li/ul/li[3]/ul/li[3]/a')
-            element_grades = try_find_partial_name(driver, ['Notenspiegel', 'Notenspiegel'.lower(), 'Exams Extract',
-                                                            'Exams Extract'.lower()])
+            driver.get(
+                'https://campusmanagement.hs-hannover.de/qisserver/pages/cs/sys/portal/hisinoneIframePage.faces?id=qis_meine_funktionen&navigationPosition=hisinoneMeinStudium%2Cqis_meine_funktionen&recordRequest=true')
+            driver.switch_to.frame('frame_iframe_qis_meine_funktionen')
+
+            print(f'waiting for LINK_TEXT: "Prüfungen"')
+            WebDriverWait(driver, timeout=10).until(expected_conditions.presence_of_element_located((By.LINK_TEXT, 'Prüfungen')))
+            element_pruefungen = driver.find_element(By.LINK_TEXT, 'Prüfungen')
+            print(f'element_pruefungen: {element_pruefungen}')
+            element_pruefungen.click()
+
+            print(f'searching for "Notenspiegel"')
+            WebDriverWait(driver, timeout=10).until(expected_conditions.presence_of_element_located((By.LINK_TEXT, 'Notenspiegel')))
+            element_grades = driver.find_element(By.LINK_TEXT, 'Notenspiegel')
             element_grades.click()
 
-            time.sleep(3)
 
-            element_show_icon = driver.find_element(By.XPATH, '/html/body/div/div[6]/div[2]/form/ul/li/a[2]/img')
+            print(f'waiting ICON: "Zeige Notenspiegel"')
+            element_show_icon = driver.find_element(By.XPATH, '//*[@title="Leistungen für Abschluss 84 Bachelor anzeigen"]')
             element_show_icon.click()
 
             time.sleep(3)
 
             # get all tr elements
-            elements = driver.find_elements(By.XPATH, '/html/body/div/div[6]/div[2]/form/table[2]/tbody/tr')
+            print(f'getting all tr elements')
+            elements = driver.find_elements(By.XPATH, '/html/body/div/div[2]/div[2]/form/table[2]/tbody/tr')
             if len(elements) == 0:
                 print('no elements in list??')
 
             # discard first (table header) and last element (Abschluss)
             elements = elements[1:-1]
-
             marks = {}
 
             for element in elements:
@@ -178,6 +190,10 @@ async def main():
             print(e)
             print(traceback.format_exc())
             print(driver.page_source)
+            # every day at 0400 we get ERR_CONNECTION_REFUSED, not our fault i guess
+            if not datetime.now().strftime('%H:%M') == '04:00':
+                await send_telegram_alert(str(e), userdata[0]['telegram_chat_id'])
+            driver.close()
             return
         finally:
             driver.close()
@@ -208,9 +224,13 @@ async def main():
             with open(filename, 'wb') as outfile:
                 pickle.dump(marks, outfile)
             msg_str = 'ICMS-Watcher Update:\n'
+            msg_subscriber_str = 'ICMS-Watcher Update:\n'
             for key in updates.keys():
                 msg_str += f'{key}: {updates[key][0]} - {updates[key][1]} - {updates[key][2]}\n'
+                msg_subscriber_str += f'{key}\n'
             await send_telegram_alert(msg_str, telegram_chat_id)
+            for sub in user['telegram_subscribers']:
+                await send_telegram_alert(msg_subscriber_str, sub)
         else:
             print(f'no update occurred for user {username}')
 
