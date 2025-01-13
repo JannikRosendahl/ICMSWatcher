@@ -12,27 +12,23 @@ import telegram
 
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.firefox.options import Options as FirefoxOptions
 from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions
 
-from webdriver_manager.chrome import ChromeDriverManager
-
-
 debug = True
 
 icms_url = 'https://campusmanagement.hs-hannover.de/qisserver/pages/cs/sys/portal/hisinoneStartPage.faces'
-telegram_api_token = '<TELEGRAM_API_TOKEN>'
+telegram_api_token = os.getenv('ICMS_TG_API_TOKEN').strip("\"\'")
 
 bot: telegram.Bot
 
 userdata = [
     {
-        'username': '<ICMS_USERNAME>',
-        'password': '<ICMS_PASSWORD>',
-        'telegram_chat_id': 0000000000,
-        'telegram_subscribers': [0000000000],
+        'username': os.getenv('ICMS_USERNAME').strip("\"\'"),
+        'password': os.getenv('ICMS_PASSWORD').strip("\"\'"),
+        'telegram_chat_id': os.getenv('ICMS_TG_ID').strip("\"\'"),
+        'telegram_subscribers': [],
     },
 ]
 
@@ -106,18 +102,18 @@ async def main():
         telegram_chat_id = user['telegram_chat_id']
         filename = f'{os.path.dirname(__file__)}/marks_{username}.pickle'
 
-        print(f'beginning for user: {username}, file_path: {filename}, telegram_chat_id: {telegram_chat_id}')
+        print(f'beginning for user: {username}, {"password: " + password if debug else ""} file_path: {filename}, telegram_chat_id: {telegram_chat_id}')
 
         options = ChromeOptions()
-        options.add_argument('--headless=new')
-        # options.add_argument('-headless')
-        # add firefox options disable js
-        # options.set_preference("javascript.enabled", False)
+        if debug:
+            print('debug: skipping headless mode')
+        else:
+            options.add_argument('--headless=new')
 
         driver = None
 
         try:
-            driver = webdriver.Chrome(ChromeDriverManager().install(), options=options)
+            driver = webdriver.Chrome(options=options)
             driver.get(icms_url)
 
             print(f'waiting for login form')
@@ -128,16 +124,16 @@ async def main():
             element_login = driver.find_element(By.XPATH, '//*[@id="loginForm:login"]')
 
             element_username.send_keys(username)
-            element_password.send_keys('X')
-            time.sleep(1)
+            #element_password.send_keys('X')
+            #time.sleep(1)
             element_password.clear()
             element_password.send_keys(password)
             element_login.click()
 
             time.sleep(3)
 
-            driver.get(
-                'https://campusmanagement.hs-hannover.de/qisserver/pages/cs/sys/portal/hisinoneIframePage.faces?id=qis_meine_funktionen&navigationPosition=hisinoneMeinStudium%2Cqis_meine_funktionen&recordRequest=true')
+            driver.get('https://campusmanagement.hs-hannover.de/qisserver/pages/cs/sys/portal/hisinoneIframePage.faces?id=qis_meine_funktionen&navigationPosition=hisinoneMeinStudium')
+            input('press enter to continue')
             driver.switch_to.frame('frame_iframe_qis_meine_funktionen')
 
             print(f'waiting for LINK_TEXT: "Prüfungen"')
@@ -153,7 +149,8 @@ async def main():
 
 
             print(f'waiting ICON: "Zeige Notenspiegel"')
-            element_show_icon = driver.find_element(By.XPATH, '//*[@title="Leistungen für Abschluss 84 Bachelor anzeigen"]')
+            WebDriverWait(driver, timeout=10).until(expected_conditions.presence_of_element_located((By.XPATH, '//*[@title="Leistungen für Abschluss 90 Master anzeigen"]')))
+            element_show_icon = driver.find_element(By.XPATH, '//*[@title="Leistungen für Abschluss 90 Master anzeigen"]')
             element_show_icon.click()
 
             time.sleep(3)
