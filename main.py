@@ -3,6 +3,7 @@ import os
 import time
 import traceback
 from datetime import datetime
+from dotenv import load_dotenv
 
 import selenium.webdriver.remote.webelement
 import asyncio
@@ -17,6 +18,8 @@ from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions
 
 debug = True
+
+load_dotenv()
 
 icms_url = 'https://campusmanagement.hs-hannover.de/qisserver/pages/cs/sys/portal/hisinoneStartPage.faces'
 telegram_api_token = os.getenv('ICMS_TG_API_TOKEN').strip("\"\'")
@@ -133,7 +136,7 @@ async def main():
             time.sleep(3)
 
             driver.get('https://campusmanagement.hs-hannover.de/qisserver/pages/cs/sys/portal/hisinoneIframePage.faces?id=qis_meine_funktionen&navigationPosition=hisinoneMeinStudium')
-            input('press enter to continue')
+            
             driver.switch_to.frame('frame_iframe_qis_meine_funktionen')
 
             print(f'waiting for LINK_TEXT: "Prüfungen"')
