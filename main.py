@@ -16,7 +16,7 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.webdriver.support.wait import WebDriverWait
-from selenium.webdriver.support import expected_conditions
+from selenium.webdriver.support import expected_conditions as EC
 
 debug = True
 
@@ -105,6 +105,48 @@ def try_find_partial_name(driver, names) -> selenium.webdriver.remote.webelement
 def element_exists(driver: WebDriver, method: str, arg) -> bool:
     return len(driver.find_elements(method, arg)) > 0
 
+def wait_for_element(driver: WebDriver, method: str, arg, timeout: int = 10, condition='clickable') -> selenium.webdriver.remote.webelement.WebElement:
+    print(f'waiting for element with method {method} and arg {arg} (condition: {condition})...', end=' ')
+    conditions = {
+        'present': EC.presence_of_element_located,
+        'visible': EC.visibility_of_element_located,
+        'clickable': EC.element_to_be_clickable
+    }
+    try:
+        element = WebDriverWait(driver, timeout).until(conditions[condition]((method, arg)))
+        WebDriverWait(driver, timeout=timeout).until(
+            lambda driver: driver.execute_script("return document.readyState") == "complete"
+        )
+        print('done')
+        return element
+    except Exception as e:
+        print(f'failed to find element with method {method} and arg {arg} after {timeout}s')
+        raise e
+
+def wait_for_login_completion(driver, timeout=10):
+    """Wait for login to complete"""
+    print('waiting for page to load after login...', end=' ')
+
+    current_url = driver.current_url
+
+    try:
+        # Strategy 1: Wait for URL change
+        WebDriverWait(driver, timeout=5).until(
+            lambda driver: driver.current_url != current_url
+        )
+    except:
+        try:
+            # Strategy 2: Wait for login form to disappear
+            WebDriverWait(driver, timeout=5).until(
+                EC.invisibility_of_element_located((By.XPATH, '//*[@id="loginForm:login"]'))
+            )
+        except:
+            # Strategy 3: Just wait for document ready state
+            WebDriverWait(driver, timeout=timeout).until(
+                lambda driver: driver.execute_script("return document.readyState") == "complete"
+            )
+
+    print('done')
 
 async def main():
     global bot
@@ -116,7 +158,7 @@ async def main():
         telegram_chat_id = user['telegram_chat_id']
         filename = f'{os.path.dirname(__file__)}/marks_{username}.pickle'
 
-        print(f'beginning for user: {username}, {"password: " + password if debug else ""} file_path: {filename}, telegram_chat_id: {telegram_chat_id}')
+        print(f'beginning for user: {username}, {"password: " + password if debug else "*"*8} file_path: {filename}, telegram_chat_id: {telegram_chat_id}')
 
         options = ChromeOptions()
         if debug:
@@ -130,12 +172,9 @@ async def main():
             driver = webdriver.Chrome(options=options)
             driver.get(icms_url)
 
-            print(f'waiting for login form')
-            WebDriverWait(driver, timeout=120).until(
-                expected_conditions.presence_of_element_located((By.XPATH, '//*[@id="loginForm:login"]')))
+            element_login = wait_for_element(driver, By.XPATH, '//*[@id="loginForm:login"]')
             element_username = driver.find_element(By.XPATH, '//*[@id="asdf"]')
             element_password = driver.find_element(By.XPATH, '//*[@id="fdsa"]')
-            element_login = driver.find_element(By.XPATH, '//*[@id="loginForm:login"]')
 
             element_username.send_keys(username)
 
@@ -149,28 +188,19 @@ async def main():
 
             driver.switch_to.frame('frame_iframe_qis_meine_funktionen')
 
-            print(f'waiting for LINK_TEXT: "Prüfungen"')
-            WebDriverWait(driver, timeout=10).until(expected_conditions.presence_of_element_located((By.LINK_TEXT, 'Prüfungen')))
-            element_pruefungen = driver.find_element(By.LINK_TEXT, 'Prüfungen')
+            element_pruefungen = wait_for_element(driver, By.LINK_TEXT, 'Prüfungen')
             print(f'element_pruefungen: {element_pruefungen}')
             element_pruefungen.click()
 
-            print(f'searching for "Notenspiegel"')
-            WebDriverWait(driver, timeout=10).until(expected_conditions.presence_of_element_located((By.LINK_TEXT, 'Notenspiegel')))
-            element_grades = driver.find_element(By.LINK_TEXT, 'Notenspiegel')
+            element_grades = wait_for_element(driver, By.LINK_TEXT, 'Notenspiegel')
             element_grades.click()
 
-
-            print(f'waiting ICON: "Zeige Notenspiegel"')
-            WebDriverWait(driver, timeout=10).until(expected_conditions.presence_of_element_located((By.XPATH, '//*[@title="Leistungen für Abschluss 90 Master anzeigen"]')))
-            element_show_icon = driver.find_element(By.XPATH, '//*[@title="Leistungen für Abschluss 90 Master anzeigen"]')
+            element_show_icon = wait_for_element(driver, By.XPATH, '//*[@title="Leistungen für Abschluss 90 Master anzeigen"]')
             element_show_icon.click()
 
             time.sleep(3)
 
-            # get all tr elements
-            print(f'getting all tr elements')
-            elements = driver.find_elements(By.XPATH, '/html/body/div/div[2]/div[2]/form/table[2]/tbody/tr')
+            elements = wait_for_element(driver, By.XPATH, '/html/body/div/div[2]/div[2]/form/table[2]/tbody').find_elements(By.XPATH, 'tr')
             if len(elements) == 0:
                 print('no elements in list??')
 
