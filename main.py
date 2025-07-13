@@ -6,6 +6,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 
 import selenium.webdriver.remote.webelement
+from selenium.webdriver.remote.webdriver import WebDriver
 import asyncio
 
 # https://github.com/python-telegram-bot/python-telegram-bot
@@ -21,16 +22,27 @@ debug = True
 
 load_dotenv()
 
+required_env_vars = [
+    'ICMS_TG_API_TOKEN',
+    'ICMS_USERNAME',
+    'ICMS_PASSWORD',
+    'ICMS_TG_ID',
+]
+
+missing_vars = [var for var in required_env_vars if os.getenv(var) is None]
+if missing_vars:
+    raise EnvironmentError(f'Missing required environment variables: {", ".join(missing_vars)}')
+
 icms_url = 'https://campusmanagement.hs-hannover.de/qisserver/pages/cs/sys/portal/hisinoneStartPage.faces'
-telegram_api_token = os.getenv('ICMS_TG_API_TOKEN').strip("\"\'")
+telegram_api_token = os.getenv('ICMS_TG_API_TOKEN').strip("\"\'") # type: ignore
 
 bot: telegram.Bot
 
 userdata = [
     {
-        'username': os.getenv('ICMS_USERNAME').strip("\"\'"),
-        'password': os.getenv('ICMS_PASSWORD').strip("\"\'"),
-        'telegram_chat_id': os.getenv('ICMS_TG_ID').strip("\"\'"),
+        'username': os.getenv('ICMS_USERNAME').strip("\"\'"), # type: ignore
+        'password': os.getenv('ICMS_PASSWORD').strip("\"\'"), # type: ignore
+        'telegram_chat_id': os.getenv('ICMS_TG_ID').strip("\"\'"), # type: ignore
         'telegram_subscribers': [],
     },
 ]
@@ -90,8 +102,7 @@ def try_find_partial_name(driver, names) -> selenium.webdriver.remote.webelement
             pass
     raise Exception(f'could not locate element with any of the names {names}')
 
-
-def element_exists(driver: webdriver, method: selenium.webdriver.common.by, arg) -> bool:
+def element_exists(driver: WebDriver, method: str, arg) -> bool:
     return len(driver.find_elements(method, arg)) > 0
 
 
@@ -113,7 +124,7 @@ async def main():
         else:
             options.add_argument('--headless=new')
 
-        driver = None
+        driver: webdriver.Chrome | None = None
 
         try:
             driver = webdriver.Chrome(options=options)
@@ -127,8 +138,7 @@ async def main():
             element_login = driver.find_element(By.XPATH, '//*[@id="loginForm:login"]')
 
             element_username.send_keys(username)
-            #element_password.send_keys('X')
-            #time.sleep(1)
+
             element_password.clear()
             element_password.send_keys(password)
             element_login.click()
@@ -136,7 +146,7 @@ async def main():
             time.sleep(3)
 
             driver.get('https://campusmanagement.hs-hannover.de/qisserver/pages/cs/sys/portal/hisinoneIframePage.faces?id=qis_meine_funktionen&navigationPosition=hisinoneMeinStudium')
-            
+
             driver.switch_to.frame('frame_iframe_qis_meine_funktionen')
 
             print(f'waiting for LINK_TEXT: "Prüfungen"')
@@ -189,14 +199,17 @@ async def main():
             print('failed during webpage navigation, exiting')
             print(e)
             print(traceback.format_exc())
-            print(driver.page_source)
+            if driver is not None:
+                print(driver.page_source)
             # every day at 0400 we get ERR_CONNECTION_REFUSED, not our fault i guess
             if not datetime.now().strftime('%H:%M') == '04:00':
                 await send_telegram_alert(str(e), userdata[0]['telegram_chat_id'])
-            driver.close()
+            if driver is not None:
+                driver.close()
             return
         finally:
-            driver.close()
+            if driver is not None:
+                driver.close()
 
         print(marks)
 
