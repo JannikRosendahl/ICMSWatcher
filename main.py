@@ -182,10 +182,11 @@ async def main():
             element_password.send_keys(password)
             element_login.click()
 
-            time.sleep(3)
+            wait_for_login_completion(driver)
 
             driver.get('https://campusmanagement.hs-hannover.de/qisserver/pages/cs/sys/portal/hisinoneIframePage.faces?id=qis_meine_funktionen&navigationPosition=hisinoneMeinStudium')
 
+            wait_for_element(driver, By.TAG_NAME, 'iframe', condition='present')
             driver.switch_to.frame('frame_iframe_qis_meine_funktionen')
 
             element_pruefungen = wait_for_element(driver, By.LINK_TEXT, 'Prüfungen')
@@ -197,8 +198,6 @@ async def main():
 
             element_show_icon = wait_for_element(driver, By.XPATH, '//*[@title="Leistungen für Abschluss 90 Master anzeigen"]')
             element_show_icon.click()
-
-            time.sleep(3)
 
             elements = wait_for_element(driver, By.XPATH, '/html/body/div/div[2]/div[2]/form/table[2]/tbody').find_elements(By.XPATH, 'tr')
             if len(elements) == 0:
