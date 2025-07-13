@@ -133,11 +133,6 @@ async def main():
             print(f'waiting for login form')
             WebDriverWait(driver, timeout=120).until(
                 expected_conditions.presence_of_element_located((By.XPATH, '//*[@id="loginForm:login"]')))
-            # Wait for username and password fields
-            WebDriverWait(driver, timeout=10).until(
-                expected_conditions.presence_of_element_located((By.XPATH, '//*[@id="asdf"]')))
-            WebDriverWait(driver, timeout=10).until(
-                expected_conditions.presence_of_element_located((By.XPATH, '//*[@id="fdsa"]')))
             element_username = driver.find_element(By.XPATH, '//*[@id="asdf"]')
             element_password = driver.find_element(By.XPATH, '//*[@id="fdsa"]')
             element_login = driver.find_element(By.XPATH, '//*[@id="loginForm:login"]')
@@ -148,36 +143,32 @@ async def main():
             element_password.send_keys(password)
             element_login.click()
 
-            # Wait for navigation after login
-            WebDriverWait(driver, timeout=20).until(
-                expected_conditions.presence_of_element_located((By.ID, 'frame_iframe_qis_meine_funktionen')))
+            time.sleep(3)
+
             driver.get('https://campusmanagement.hs-hannover.de/qisserver/pages/cs/sys/portal/hisinoneIframePage.faces?id=qis_meine_funktionen&navigationPosition=hisinoneMeinStudium')
 
             driver.switch_to.frame('frame_iframe_qis_meine_funktionen')
 
             print(f'waiting for LINK_TEXT: "Prüfungen"')
-            WebDriverWait(driver, timeout=10).until(
-                expected_conditions.presence_of_element_located((By.LINK_TEXT, 'Prüfungen')))
+            WebDriverWait(driver, timeout=10).until(expected_conditions.presence_of_element_located((By.LINK_TEXT, 'Prüfungen')))
             element_pruefungen = driver.find_element(By.LINK_TEXT, 'Prüfungen')
             print(f'element_pruefungen: {element_pruefungen}')
             element_pruefungen.click()
 
-            # Wait for "Notenspiegel" link to appear after clicking "Prüfungen"
-            WebDriverWait(driver, timeout=10).until(
-                expected_conditions.presence_of_element_located((By.LINK_TEXT, 'Notenspiegel')))
+            print(f'searching for "Notenspiegel"')
+            WebDriverWait(driver, timeout=10).until(expected_conditions.presence_of_element_located((By.LINK_TEXT, 'Notenspiegel')))
             element_grades = driver.find_element(By.LINK_TEXT, 'Notenspiegel')
             element_grades.click()
 
-            # Wait for the icon to show after clicking "Notenspiegel"
+
             print(f'waiting ICON: "Zeige Notenspiegel"')
-            WebDriverWait(driver, timeout=10).until(
-                expected_conditions.presence_of_element_located((By.XPATH, '//*[@title="Leistungen für Abschluss 90 Master anzeigen"]')))
+            WebDriverWait(driver, timeout=10).until(expected_conditions.presence_of_element_located((By.XPATH, '//*[@title="Leistungen für Abschluss 90 Master anzeigen"]')))
             element_show_icon = driver.find_element(By.XPATH, '//*[@title="Leistungen für Abschluss 90 Master anzeigen"]')
             element_show_icon.click()
 
-            # Wait for table to load after clicking the icon
-            WebDriverWait(driver, timeout=10).until(
-                expected_conditions.presence_of_element_located((By.XPATH, '/html/body/div/div[2]/div[2]/form/table[2]/tbody/tr')))
+            time.sleep(3)
+
+            # get all tr elements
             print(f'getting all tr elements')
             elements = driver.find_elements(By.XPATH, '/html/body/div/div[2]/div[2]/form/table[2]/tbody/tr')
             if len(elements) == 0:
