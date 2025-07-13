@@ -1,0 +1,10 @@
+services:
+  icms-watcher:
+    build: .
+    container_name: icms-watcher
+    env_file:
+      - .env
+    volumes:
+      - ./marks:/app/marks
+    # If you want to see logs interactively
+    tty: true

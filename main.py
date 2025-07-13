@@ -1,6 +1,5 @@
 import pickle
 import os
-import time
 import traceback
 from datetime import datetime
 from dotenv import load_dotenv
@@ -18,7 +17,9 @@ from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
-debug = True
+debug_telegram = False
+debug_chrome = False    # set to 'True' to run Chrome in non-headless mode. Note: running in non-headless mode does not work inside Docker containers
+debug = debug_telegram or debug_chrome
 
 load_dotenv()
 
@@ -79,7 +80,7 @@ async def send_telegram_alert(msg, telegram_chat_id):
 
     print(f'sending telegram message to {telegram_chat_id}')
     print(f'msg: {msg}\n')
-    if debug:
+    if debug_telegram:
         print('debug: skipping sending telegram message')
         return
 
@@ -152,19 +153,26 @@ async def main():
     global bot
     bot = telegram.Bot(telegram_api_token)
 
+    marks_dir = os.path.join(os.path.dirname(__file__), "marks")
+    os.makedirs(marks_dir, exist_ok=True)
+
+
     for user in userdata:
         username = user['username']
         password = user['password']
         telegram_chat_id = user['telegram_chat_id']
-        filename = f'{os.path.dirname(__file__)}/marks_{username}.pickle'
+        filename = os.path.join(marks_dir, f'marks_{username}.pickle')
 
         print(f'beginning for user: {username}, {"password: " + password if debug else "*"*8} file_path: {filename}, telegram_chat_id: {telegram_chat_id}')
 
         options = ChromeOptions()
-        if debug:
+        if debug_chrome:
             print('debug: skipping headless mode')
         else:
             options.add_argument('--headless=new')
+            options.add_argument('--no-sandbox')
+            options.add_argument('--disable-dev-shm-usage')
+            options.add_argument('--disable-gpu')
 
         driver: webdriver.Chrome | None = None
 
