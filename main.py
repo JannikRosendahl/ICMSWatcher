@@ -22,6 +22,8 @@ debug_telegram = True
 debug_chrome = True    # set to 'True' to run Chrome in non-headless mode. Note: running in non-headless mode does not work inside Docker containers
 debug = debug_telegram or debug_chrome
 
+ensure_student_role = True # set to 'True' to ensure that the 'Student/-in Hochschule Hannover' role is selected after login. this is needed if the account has multiple roles e.g. student and employee
+
 load_dotenv()
 
 required_env_vars: list[str] = [
@@ -191,21 +193,18 @@ async def main():
         wait_for_login_completion(driver)
 
         # switch to student role
-        # target role: 'Student/-in Hochschule Hannover'
-        # role selector 'id="widgetRender:9:roleSwitcherForm:roles_label"'
-        element_role_selector = wait_for_element(driver, By.ID, 'widgetRender:9:roleSwitcherForm:roles_label')
-        element_role_selector.click()
-        
-        wait_for_element(driver, By.ID, 'widgetRender:9:roleSwitcherForm:roles_1', condition='visible')
-        
-        element_student_role = driver.find_element(By.ID, 'widgetRender:9:roleSwitcherForm:roles_1')
-        element_student_role.click()
-    
-        input('pressed enter to continue...')
-
-        # wait for reload after role switch
-        # driver.implicitly_wait(2)
-
+        if ensure_student_role:
+            element_role_selector = wait_for_element(driver, By.ID, 'widgetRender:9:roleSwitcherForm:roles_label')
+            element_role_selector.click()
+            
+            element_student_role = wait_for_element(
+                driver, 
+                By.XPATH, 
+                "//li[contains(@class, 'ui-selectonemenu-item') and contains(normalize-space(.), 'Student/-in Hochschule Hannover')]",
+                condition='visible'
+            )
+            element_student_role.click()
+            wait_for_login_completion(driver)
 
         driver.get('https://campusmanagement.hs-hannover.de/qisserver/pages/cs/sys/portal/hisinoneIframePage.faces?id=qis_meine_funktionen&navigationPosition=hisinoneMeinStudium')
 
@@ -249,10 +248,6 @@ async def main():
             marks[name] = mark, art, status
     except Exception as e:
         print('failed during webpage navigation, exiting')
-        #print(e)
-        #print(traceback.format_exc())
-        #if driver is not None:
-        #    print(driver.page_source)
         # every day at 0400 we get ERR_CONNECTION_REFUSED, not our fault i guess
         if not datetime.now().strftime('%H:%M') == '04:00':
             await send_telegram_alert(str(e), userdata['telegram_chat_id'])
