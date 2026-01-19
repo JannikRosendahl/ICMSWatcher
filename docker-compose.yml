@@ -14,7 +14,7 @@ services:
       #   */30 * * * * - every 30 minutes
       #   0 */2 * * *  - every 2 hours
       #   0 8 * * *    - daily at 8 AM
-      CRON_SCHEDULE: "*/5 * * * *"
+      CRON_SCHEDULE: "*/30 * * * *"
     volumes:
       - ./marks:/app/marks
       - ./logs:/app/logs
