@@ -22,7 +22,9 @@ RUN apt-get update && \
 WORKDIR /app
 
 # Install uv
-RUN pip install --no-cache-dir uv
+RUN pip install --no-cache-dir uv && \
+    # Ensure uv is in PATH
+    ln -s $(python -c "import site; print(site.USER_BASE)")/bin/uv /usr/local/bin/uv || true
 
 # Copy pyproject.toml and uv.lock
 COPY pyproject.toml uv.lock ./

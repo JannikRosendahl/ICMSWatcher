@@ -5,7 +5,10 @@ services:
     env_file:
       - .env
     environment:
-      # Cron schedule (default: every 30 minutes)
+      # Run mode: set RUN_ONCE=true to run once and exit, otherwise runs on schedule
+      # RUN_ONCE: "true"
+      
+      # Cron schedule (only used when RUN_ONCE is not set to true)
       # Format: minute hour day month weekday
       # Examples:
       #   */30 * * * * - every 30 minutes
