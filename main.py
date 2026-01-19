@@ -18,8 +18,8 @@ from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
-debug_telegram = True
-debug_chrome = True    # set to 'True' to run Chrome in non-headless mode. Note: running in non-headless mode does not work inside Docker containers
+debug_telegram = False
+debug_chrome = False    # set to 'True' to run Chrome in non-headless mode. Note: running in non-headless mode does not work inside Docker containers
 debug = debug_telegram or debug_chrome
 
 ensure_student_role = True # set to 'True' to ensure that the 'Student/-in Hochschule Hannover' role is selected after login. this is needed if the account has multiple roles e.g. student and employee

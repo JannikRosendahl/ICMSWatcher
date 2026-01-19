@@ -4,7 +4,16 @@ services:
     container_name: icms-watcher
     env_file:
       - .env
+    environment:
+      # Cron schedule (default: every 30 minutes)
+      # Format: minute hour day month weekday
+      # Examples:
+      #   */30 * * * * - every 30 minutes
+      #   0 */2 * * *  - every 2 hours
+      #   0 8 * * *    - daily at 8 AM
+      CRON_SCHEDULE: "*/5 * * * *"
     volumes:
       - ./marks:/app/marks
-    # If you want to see logs interactively
+      - ./logs:/app/logs
+    restart: unless-stopped
     tty: true
