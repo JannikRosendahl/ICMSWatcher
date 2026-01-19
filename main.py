@@ -2,6 +2,7 @@ import pickle
 import os
 import traceback
 from datetime import datetime
+from typing import Any
 from dotenv import load_dotenv
 
 import selenium.webdriver.remote.webelement
@@ -17,20 +18,20 @@ from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
-debug_telegram = False
-debug_chrome = False    # set to 'True' to run Chrome in non-headless mode. Note: running in non-headless mode does not work inside Docker containers
+debug_telegram = True
+debug_chrome = True    # set to 'True' to run Chrome in non-headless mode. Note: running in non-headless mode does not work inside Docker containers
 debug = debug_telegram or debug_chrome
 
 load_dotenv()
 
-required_env_vars = [
+required_env_vars: list[str] = [
     'ICMS_TG_API_TOKEN',
     'ICMS_USERNAME',
     'ICMS_PASSWORD',
     'ICMS_TG_ID',
 ]
 
-missing_vars = [var for var in required_env_vars if os.getenv(var) is None]
+missing_vars = [var for var in required_env_vars if not os.getenv(var)]
 if missing_vars:
     raise EnvironmentError(f'Missing required environment variables: {", ".join(missing_vars)}')
 
@@ -39,16 +40,14 @@ telegram_api_token = os.getenv('ICMS_TG_API_TOKEN').strip("\"\'") # type: ignore
 
 bot: telegram.Bot
 
-userdata = [
-    {
-        'username': os.getenv('ICMS_USERNAME').strip("\"\'"), # type: ignore
-        'password': os.getenv('ICMS_PASSWORD').strip("\"\'"), # type: ignore
-        'telegram_chat_id': os.getenv('ICMS_TG_ID').strip("\"\'"), # type: ignore
-        'telegram_subscribers': [],
-    },
-]
+userdata: dict[str, Any] = {
+    'username': os.getenv('ICMS_USERNAME').strip("\"\'"), # type: ignore
+    'password': os.getenv('ICMS_PASSWORD').strip("\"\'"), # type: ignore
+    'telegram_chat_id': os.getenv('ICMS_TG_ID').strip("\"\'"), # type: ignore
+    'telegram_subscribers': [],
+}
 
-status_codes = {
+status_codes: dict[str, str] = {
     'AN': 'angemeldet',
     'BE': 'bestanden',
     'NB': 'nicht bestanden',
@@ -66,7 +65,7 @@ status_codes = {
     'FAE': 'fristgerechte Arbeitsabgabe erfolgt',
 }
 
-art_codes = {
+art_codes: dict[str, str] = {
     'GE': 'Modul',
     'PL': 'Teilmodul',
     'MB': 'Modul Bachelorarbeit',
@@ -75,7 +74,7 @@ art_codes = {
 }
 
 
-async def send_telegram_alert(msg, telegram_chat_id):
+async def send_telegram_alert(msg: str, telegram_chat_id: str) -> None:
     global bot
 
     print(f'sending telegram message to {telegram_chat_id}')
@@ -88,7 +87,7 @@ async def send_telegram_alert(msg, telegram_chat_id):
         await bot.send_message(text=msg, chat_id=telegram_chat_id)
 
 
-async def telegram_debug():
+async def telegram_debug() -> None:
     global bot
     async with bot:
         print((await bot.get_updates())[0])
@@ -157,132 +156,148 @@ async def main():
     os.makedirs(marks_dir, exist_ok=True)
 
 
-    for user in userdata:
-        username = user['username']
-        password = user['password']
-        telegram_chat_id = user['telegram_chat_id']
-        filename = os.path.join(marks_dir, f'marks_{username}.pickle')
+    username: str = userdata['username']
+    password: str = userdata['password']
+    telegram_chat_id = userdata['telegram_chat_id']
+    filename = os.path.join(marks_dir, f'marks_{username}.pickle')
 
-        print(f'beginning for user: {username}, {"password: " + password if debug else "*"*8} file_path: {filename}, telegram_chat_id: {telegram_chat_id}')
+    print(f'beginning for user: {username}, file_path: {filename}, telegram_chat_id: {telegram_chat_id}')
 
-        options = ChromeOptions()
-        if debug_chrome:
-            print('debug: skipping headless mode')
-        else:
-            options.add_argument('--headless=new')
-            options.add_argument('--no-sandbox')
-            options.add_argument('--disable-dev-shm-usage')
-            options.add_argument('--disable-gpu')
+    options = ChromeOptions()
+    if debug_chrome:
+        print('debug: skipping headless mode')
+    else:
+        options.add_argument('--headless=new')
+        options.add_argument('--no-sandbox')
+        options.add_argument('--disable-dev-shm-usage')
+        options.add_argument('--disable-gpu')
 
-        driver: webdriver.Chrome | None = None
+    driver: webdriver.Chrome | None = None
 
-        try:
-            driver = webdriver.Chrome(options=options)
-            driver.get(icms_url)
+    try:
+        driver = webdriver.Chrome(options=options)
+        driver.get(icms_url)
 
-            element_login = wait_for_element(driver, By.XPATH, '//*[@id="loginForm:login"]')
-            element_username = driver.find_element(By.XPATH, '//*[@id="asdf"]')
-            element_password = driver.find_element(By.XPATH, '//*[@id="fdsa"]')
+        element_login = wait_for_element(driver, By.XPATH, '//*[@id="loginForm:login"]')
+        element_username = driver.find_element(By.XPATH, '//*[@id="asdf"]')
+        element_password = driver.find_element(By.XPATH, '//*[@id="fdsa"]')
 
-            element_username.send_keys(username)
+        element_username.send_keys(username)
 
-            element_password.clear()
-            element_password.send_keys(password)
-            element_login.click()
+        element_password.clear()
+        element_password.send_keys(password)
+        element_login.click()
 
-            wait_for_login_completion(driver)
+        wait_for_login_completion(driver)
 
-            driver.get('https://campusmanagement.hs-hannover.de/qisserver/pages/cs/sys/portal/hisinoneIframePage.faces?id=qis_meine_funktionen&navigationPosition=hisinoneMeinStudium')
+        # switch to student role
+        # target role: 'Student/-in Hochschule Hannover'
+        # role selector 'id="widgetRender:9:roleSwitcherForm:roles_label"'
+        element_role_selector = wait_for_element(driver, By.ID, 'widgetRender:9:roleSwitcherForm:roles_label')
+        element_role_selector.click()
+        
+        wait_for_element(driver, By.ID, 'widgetRender:9:roleSwitcherForm:roles_1', condition='visible')
+        
+        element_student_role = driver.find_element(By.ID, 'widgetRender:9:roleSwitcherForm:roles_1')
+        element_student_role.click()
+    
+        input('pressed enter to continue...')
 
-            wait_for_element(driver, By.TAG_NAME, 'iframe', condition='present')
-            driver.switch_to.frame('frame_iframe_qis_meine_funktionen')
+        # wait for reload after role switch
+        # driver.implicitly_wait(2)
 
-            element_pruefungen = wait_for_element(driver, By.LINK_TEXT, 'Prüfungen')
-            print(f'element_pruefungen: {element_pruefungen}')
-            element_pruefungen.click()
 
-            element_grades = wait_for_element(driver, By.LINK_TEXT, 'Notenspiegel')
-            element_grades.click()
+        driver.get('https://campusmanagement.hs-hannover.de/qisserver/pages/cs/sys/portal/hisinoneIframePage.faces?id=qis_meine_funktionen&navigationPosition=hisinoneMeinStudium')
 
-            element_show_icon = wait_for_element(driver, By.XPATH, '//*[@title="Leistungen für Abschluss 90 Master anzeigen"]')
-            element_show_icon.click()
+        wait_for_element(driver, By.TAG_NAME, 'iframe', condition='present')
+        driver.switch_to.frame('frame_iframe_qis_meine_funktionen')
 
-            elements = wait_for_element(driver, By.XPATH, '/html/body/div/div[2]/div[2]/form/table[2]/tbody').find_elements(By.XPATH, 'tr')
-            if len(elements) == 0:
-                print('no elements in list??')
+        element_pruefungen = wait_for_element(driver, By.LINK_TEXT, 'Prüfungen')
+        print(f'element_pruefungen: {element_pruefungen}')
+        element_pruefungen.click()
 
-            # discard first (table header) and last element (Abschluss)
-            elements = elements[1:-1]
-            marks = {}
+        element_grades = wait_for_element(driver, By.LINK_TEXT, 'Notenspiegel')
+        element_grades.click()
 
-            for element in elements:
-                # get all td elements (a row )
-                tds = element.find_elements(By.XPATH, 'td')
-                if len(tds) <= 4:
-                    continue
+        element_show_icon = wait_for_element(driver, By.XPATH, '//*[@title="Leistungen für Abschluss 90 Master anzeigen"]')
+        element_show_icon.click()
 
-                if int(tds[0].text) < 9999:
-                    continue
+        elements = wait_for_element(driver, By.XPATH, '/html/body/div/div[2]/div[2]/form/table[2]/tbody').find_elements(By.XPATH, 'tr')
+        if len(elements) == 0:
+            print('no elements in list??')
 
-                name = tds[1].text
-                art = tds[2].text
-                art = art_codes[art] if art in art_codes else art
-                mark = tds[3].text
-                status = tds[4].text
-                status = status_codes[status] if status in status_codes else status
+        # discard first (table header) and last element (Abschluss)
+        elements = elements[1:-1]
+        marks = {}
 
-                marks[name] = mark, art, status
-        except Exception as e:
-            print('failed during webpage navigation, exiting')
-            print(e)
-            print(traceback.format_exc())
-            if driver is not None:
-                print(driver.page_source)
-            # every day at 0400 we get ERR_CONNECTION_REFUSED, not our fault i guess
-            if not datetime.now().strftime('%H:%M') == '04:00':
-                await send_telegram_alert(str(e), userdata[0]['telegram_chat_id'])
-            if driver is not None:
-                driver.close()
-            return
-        finally:
-            if driver is not None:
-                driver.close()
+        for element in elements:
+            # get all td elements (a row )
+            tds = element.find_elements(By.XPATH, 'td')
+            if len(tds) <= 4:
+                continue
 
-        print(marks)
+            if int(tds[0].text) < 9999:
+                continue
 
-        # compare to old marks
-        updates = {}
-        # try to open file with old date
-        try:
-            with open(filename, 'rb') as infile:
-                old_marks = pickle.load(infile)
-                for key in marks.keys():
-                    if key not in old_marks or marks[key] != old_marks[key]:
-                        updates[key] = marks[key]
+            name = tds[1].text
+            art = tds[2].text
+            art = art_codes[art] if art in art_codes else art
+            mark = tds[3].text
+            status = tds[4].text
+            status = status_codes[status] if status in status_codes else status
 
-        # if no file with old data could be opened, consider all data new
-        except OSError as e:
-            print('failed to open file with previous data, considering all data updated')
+            marks[name] = mark, art, status
+    except Exception as e:
+        print('failed during webpage navigation, exiting')
+        #print(e)
+        #print(traceback.format_exc())
+        #if driver is not None:
+        #    print(driver.page_source)
+        # every day at 0400 we get ERR_CONNECTION_REFUSED, not our fault i guess
+        if not datetime.now().strftime('%H:%M') == '04:00':
+            await send_telegram_alert(str(e), userdata['telegram_chat_id'])
+        if driver is not None:
+            driver.close()
+        return
+    finally:
+        if driver is not None:
+            driver.close()
+
+    print(marks)
+
+    # compare to old marks
+    updates = {}
+    # try to open file with old date
+    try:
+        with open(filename, 'rb') as infile:
+            old_marks = pickle.load(infile)
             for key in marks.keys():
-                updates[key] = marks[key]
+                if key not in old_marks or marks[key] != old_marks[key]:
+                    updates[key] = marks[key]
 
-        # if updates occurred, write data to file
-        if len(updates) > 0:
-            print(f'the following updates occurred for user {username}:')
-            for key in updates:
-                print('\t', key, updates[key][0], updates[key][1])
-            with open(filename, 'wb') as outfile:
-                pickle.dump(marks, outfile)
-            msg_str = 'ICMS-Watcher Update:\n'
-            msg_subscriber_str = 'ICMS-Watcher Update:\n'
-            for key in updates.keys():
-                msg_str += f'{key}: {updates[key][0]} - {updates[key][1]} - {updates[key][2]}\n'
-                msg_subscriber_str += f'{key}\n'
-            await send_telegram_alert(msg_str, telegram_chat_id)
-            for sub in user['telegram_subscribers']:
-                await send_telegram_alert(msg_subscriber_str, sub)
-        else:
-            print(f'no update occurred for user {username}')
+    # if no file with old data could be opened, consider all data new
+    except OSError as e:
+        print('failed to open file with previous data, considering all data updated')
+        for key in marks.keys():
+            updates[key] = marks[key]
+
+    # if updates occurred, write data to file
+    if len(updates) > 0:
+        print(f'the following updates occurred for user {username}:')
+        for key in updates:
+            print('\t', key, updates[key][0], updates[key][1])
+        with open(filename, 'wb') as outfile:
+            pickle.dump(marks, outfile)
+        msg_str = 'ICMS-Watcher Update:\n'
+        msg_subscriber_str = 'ICMS-Watcher Update:\n'
+        for key in updates.keys():
+            msg_str += f'{key}: {updates[key][0]} - {updates[key][1]} - {updates[key][2]}\n'
+            msg_subscriber_str += f'{key}\n'
+        await send_telegram_alert(msg_str, telegram_chat_id)
+        for sub in userdata['telegram_subscribers']:
+            await send_telegram_alert(msg_subscriber_str, sub)
+    else:
+        print(f'no update occurred for user {username}')
 
 
 if __name__ == '__main__':
