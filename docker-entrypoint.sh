@@ -8,7 +8,7 @@ CRON_SCHEDULE=${CRON_SCHEDULE:-"*/30 * * * *"}
 echo "Starting ICMS Watcher with cron schedule: $CRON_SCHEDULE"
 
 # Create cron job
-echo "$CRON_SCHEDULE cd /app && /usr/local/bin/python /app/main.py >> /app/logs/cron.log 2>&1" > /etc/cron.d/icms-watcher
+echo "$CRON_SCHEDULE cd /app && uv run python /app/main.py >> /app/logs/cron.log 2>&1" > /etc/cron.d/icms-watcher
 
 # Give execution rights on the cron job
 chmod 0644 /etc/cron.d/icms-watcher
@@ -21,7 +21,7 @@ touch /app/logs/cron.log
 
 # Run once immediately on startup
 echo "Running initial check..."
-cd /app && /usr/local/bin/python /app/main.py >> /app/logs/cron.log 2>&1 || true
+cd /app && uv run python /app/main.py >> /app/logs/cron.log 2>&1 || true
 
 # Start cron in foreground
 echo "Starting cron daemon..."
