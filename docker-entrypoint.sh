@@ -18,8 +18,10 @@ fi
 
 echo "Starting ICMS Watcher with cron schedule: $CRON_SCHEDULE"
 
-# Create cron job with explicit PATH for uv
-echo "$CRON_SCHEDULE cd /app && uv run python /app/main.py >> /app/logs/cron.log 2>&1" > /etc/cron.d/icms-watcher
+# Create cron job with explicit PATH
+echo "PATH=/usr/local/bin:/usr/bin:/bin" > /etc/cron.d/icms-watcher
+echo "$CRON_SCHEDULE cd /app && /usr/local/bin/uv run python /app/main.py >> /app/logs/cron.log 2>&1" >> /etc/cron.d/icms-watcher
+echo "" >> /etc/cron.d/icms-watcher
 
 # Give execution rights on the cron job
 chmod 0644 /etc/cron.d/icms-watcher
